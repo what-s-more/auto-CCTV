@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+.pytest_cache/
+.coverage
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Build
+build/
+dist/
+*.spec
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 编译后的Python文件
+*.pyc
+*.pyo
+*.pyd
