@@ -1,35 +1,21 @@
 import os
+import subprocess
 import sys
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
-from selenium.webdriver import EdgeOptions
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+import time
 
 # ================== 配置区域 ==================
-def resource_path(relative_path):
-    """获取资源文件的绝对路径"""
-    try:
-        # PyInstaller创建临时文件夹，将路径存储在_MEIPASS中
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    
-    return os.path.join(base_path, relative_path)
-
-# 根据是否打包环境设置edge driver路径
-if getattr(sys, 'frozen', False):
-    # 如果是打包环境
-    edge_driver_path = resource_path("edgedriver_win64/msedgedriver.exe")
-else:
-    # 如果是开发环境
-    edge_driver_path = "D:/111/edgedriver_win64/msedgedriver.exe"
-
+# 不再需要指定 msedgedriver.exe 路径
+# 使用系统安装的 Edge 浏览器
 WAIT_TIMEOUT = 10
 # =============================================
 
-# 频道URL映射
+# 频道URL映射（保持不变）
 CHANNEL_URLS = {
     "01.png": "https://tv.cctv.com/live/cctv1/",
     "02.png": "https://tv.cctv.com/live/cctv2/",
@@ -60,20 +46,50 @@ class CCTVController:
         self.edge_options.add_argument('--log-level=3')
         self.edge_options.add_argument('--silent')
         self.edge_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-        self.service = Service(executable_path=edge_driver_path)
+        
+        # 自动使用系统安装的 Edge 浏览器
+        # 不指定路径，让 Selenium 自动查找
+        self.service = Service()
         
         # 浏览器实例
         self.driver = None
         self.wait = None
         self.WAIT_TIMEOUT = WAIT_TIMEOUT
 
+    def find_edge_path(self):
+        """尝试在常见位置查找 Edge 浏览器路径"""
+        possible_paths = [
+            # Windows 10/11 默认安装位置
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            # Windows 用户目录
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+            # 通过注册表查找（备用方案）
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        
+        # 如果没找到，返回 None 让 Selenium 使用默认方式
+        return None
+
     def open_channel(self, img_file):
         try:
             # 如果已经有浏览器实例，先关闭
             if self.driver:
-                self.driver.quit()
+                try:
+                    self.driver.quit()
+                except:
+                    pass
+                self.driver = None
             
-            # 启动浏览器
+            # 设置浏览器路径（如果找到）
+            edge_path = self.find_edge_path()
+            if edge_path:
+                self.edge_options.binary_location = edge_path
+            
+            # 启动浏览器，使用系统安装的 Edge
             self.driver = webdriver.Edge(service=self.service, options=self.edge_options)
             self.wait = WebDriverWait(self.driver, self.WAIT_TIMEOUT)
             
@@ -88,19 +104,42 @@ class CCTVController:
             print(f"正在打开频道: {img_file} - {url}")
             
             # 等待页面加载完成
-            self.wait.until(EC.title_contains("CCTV"))
-            print("✅ 页面已加载")
+            try:
+                self.wait.until(lambda driver: driver.execute_script('return document.readyState') == 'complete')
+                print("✅ 页面已加载")
+            except Exception as e:
+                print(f"⚠️ 页面加载超时，但继续运行: {e}")
             
             return True
         except Exception as e:
             print(f"❌ 打开频道失败: {e}")
+            print("尝试清理并重新启动浏览器...")
+            
+            # 尝试清理进程
+            try:
+                if self.driver:
+                    self.driver.quit()
+            except:
+                pass
+            
+            # 提供解决方案
+            print("\n解决方案:")
+            print("1. 确保已安装 Microsoft Edge 浏览器")
+            print("2. 运行命令: pip install selenium --upgrade")
+            print("3. 如果仍失败，请从 Microsoft 官网下载 Edge 驱动:")
+            print("   https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/")
+            
             return False
+
     def close_browser(self):
         if self.driver:
-            self.driver.quit()
-            self.driver = None
-            print("浏览器已关闭")
+            try:
+                self.driver.quit()
+                print("浏览器已关闭")
+            except Exception as e:
+                print(f"关闭浏览器时出错: {e}")
+            finally:
+                self.driver = None
 
     def exit_program(self):
-        if self.driver:
-            self.driver.quit()
+        self.close_browser()
